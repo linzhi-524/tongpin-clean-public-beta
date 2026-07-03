@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>同频 · 网页遥控器</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#261d38;background:#f7f3ff}
+    *{box-sizing:border-box}body{margin:0}.wrap{max-width:680px;margin:auto;padding:20px}.hero{background:linear-gradient(135deg,#5f3fb2,#9a78e2);color:white;border-radius:24px;padding:24px;box-shadow:0 14px 36px #5f3fb233}.hero h1{margin:0 0 6px;font-size:32px}.card{background:white;border:1px solid #e7dff3;border-radius:20px;padding:18px;margin-top:14px;box-shadow:0 8px 24px #614b8b12}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.full{grid-column:1/-1}input,button,textarea{width:100%;font:inherit;border-radius:13px;padding:12px;border:1px solid #d7cce9}button{border:0;background:#6d4cc2;color:white;font-weight:700;cursor:pointer}button.secondary{background:#eee8f7;color:#4c386f}button:active{transform:scale(.99)}.song{font-size:22px;font-weight:800}.muted{color:#766989}.lyric{font-size:18px;font-weight:700;color:#5f3fb2;margin-top:12px}.next-lyric{font-size:14px;color:#8a7aa3;margin-top:4px}.status{white-space:pre-wrap;background:#f5f1fb;border-radius:13px;padding:12px;margin-top:10px}.progress{height:8px;background:#eee8f7;border-radius:8px;overflow:hidden;margin:12px 0}.bar{height:100%;width:0;background:#6d4cc2}.small{font-size:13px}.ok{color:#247a4b}.bad{color:#b53939}@media(max-width:480px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero"><h1>同频</h1><div>不用 ChatGPT 也能先测试手机控制链路。</div></section>
+    <section class="card">
+      <div class="grid">
+        <input id="code" placeholder="房间码" maxlength="6" />
+        <input id="secret" placeholder="房间密钥" />
+        <button id="connect" class="full">连接房间</button>
+      </div>
+      <div id="connection" class="status">尚未连接</div>
+    </section>
+    <section class="card">
+      <div id="title" class="song">等待歌曲</div>
+      <div id="artist" class="muted">—</div>
+      <div id="lyric" class="lyric">歌词等待同步</div>
+      <div id="nextLyric" class="next-lyric"></div>
+      <div class="progress"><div id="bar" class="bar"></div></div>
+      <div id="time" class="small muted">0:00 / 0:00</div>
+      <div class="grid" style="margin-top:14px">
+        <button data-command="previous" class="secondary">上一首</button>
+        <button data-command="play">播放</button>
+        <button data-command="pause">暂停</button>
+        <button data-command="next" class="secondary">下一首</button>
+      </div>
+      <div id="commandResult" class="status">尚无命令</div>
+    </section>
+    <section class="card">
+      <div class="grid">
+        <input id="seek" type="number" min="0" placeholder="跳到第几秒" />
+        <button id="seekButton">跳转进度</button>
+        <textarea id="note" class="full" rows="2" placeholder="写一句听歌笔记"></textarea>
+        <button id="noteButton" class="full secondary">保存听歌笔记</button>
+      </div>
+    </section>
+  </div>
+<script>
+const $=id=>document.getElementById(id);let timer=null;
+const auth=()=>({"Authorization":"Bearer "+$('secret').value.trim(),"Content-Type":"application/json"});
+const fmt=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return Math.floor(s/60)+":"+String(s%60).padStart(2,'0')};
+function save(){localStorage.setItem('tongpin_code',$('code').value.trim().toUpperCase());localStorage.setItem('tongpin_secret',$('secret').value.trim())}
+async function request(path,opt={}){const r=await fetch(path,{...opt,headers:{...auth(),...(opt.headers||{})}});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
+async function refresh(){const code=$('code').value.trim().toUpperCase();if(!code)return;try{const room=await request('/api/rooms/'+code);$('connection').textContent='已连接 · 最近更新 '+new Date(room.updatedAt).toLocaleTimeString();$('connection').className='status ok';const p=room.playback||{};$('title').textContent=p.title||'等待歌曲';$('artist').textContent=(p.artist||'—')+(p.playing?' · 播放中':' · 已暂停');$('lyric').textContent=p.lyric||(p.lyricsSource||'歌词等待同步');$('nextLyric').textContent=p.nextLyric?('下一句：'+p.nextLyric):'';$('time').textContent=fmt(p.positionMs)+' / '+fmt(p.durationMs);$('bar').style.width=(p.durationMs?Math.min(100,p.positionMs/p.durationMs*100):0)+'%';const result=room.lastCommandResult;$('commandResult').textContent=result?`${result.status} · ${result.message}`:'尚无命令';}catch(e){$('connection').textContent='连接失败：'+e.message;$('connection').className='status bad'}}
+async function command(type,positionMs){const code=$('code').value.trim().toUpperCase();try{await request('/api/rooms/'+code+'/commands',{method:'POST',body:JSON.stringify({type,positionMs})});$('commandResult').textContent='命令已发送，等待手机领取';setTimeout(refresh,400)}catch(e){$('commandResult').textContent='发送失败：'+e.message}}
+$('connect').onclick=()=>{save();refresh();clearInterval(timer);timer=setInterval(refresh,1000)};
+document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>command(b.dataset.command));
+$('seekButton').onclick=()=>command('seek',Math.max(0,Number($('seek').value||0))*1000);
+$('noteButton').onclick=async()=>{try{await request('/api/rooms/'+$('code').value.trim().toUpperCase()+'/notes',{method:'POST',body:JSON.stringify({text:$('note').value})});$('note').value='';alert('笔记已保存')}catch(e){alert('保存失败：'+e.message)}};
+$('code').value=localStorage.getItem('tongpin_code')||'';$('secret').value=localStorage.getItem('tongpin_secret')||'';if($('code').value&&$('secret').value)$('connect').click();
+</script>
+</body>
+</html>

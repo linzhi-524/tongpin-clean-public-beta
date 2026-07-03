@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: tongpin-clean-beta
+    runtime: node
+    plan: free
+    rootDir: services/server
+    buildCommand: npm ci --no-audit --no-fund && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATA_FILE
+        value: /tmp/tongpin-rooms.json
