@@ -10,11 +10,11 @@ const textResult = (value: unknown) => ({
 });
 
 export function createMcpServer(store: RoomStore): McpServer {
-  const server = new McpServer({ name: 'tongpin-clean', version: '1.1.2' });
+  const server = new McpServer({ name: 'tongpin-clean', version: '1.2.0' });
 
   server.registerTool('create_room', {
     title: '创建同频房间',
-    description: '创建新的共同听歌房间，返回房间码与私密密钥。',
+    description: '创建新的共同听歌房间，返回房间码与私密密钥。适用于 ChatGPT、Claude、Gemini SDK 或其他支持 MCP 的 AI 客户端。',
     inputSchema: {}
   }, async () => {
     const room = await store.create();
@@ -23,7 +23,7 @@ export function createMcpServer(store: RoomStore): McpServer {
 
   server.registerTool('get_room', {
     title: '读取同频房间',
-    description: '读取当前歌曲、进度、播放状态、当前与下一句同步歌词、命令执行结果和听歌笔记。',
+    description: '读取当前歌曲、当前播放器（QQ 音乐 / 酷狗音乐 / 网易云音乐 / 其他媒体会话）、进度、播放状态、当前与下一句同步歌词、命令执行结果和听歌笔记。',
     inputSchema: {
       code: z.string().min(6),
       roomSecret: z.string().min(10)
@@ -38,7 +38,7 @@ export function createMcpServer(store: RoomStore): McpServer {
 
   server.registerTool('set_playback_command', {
     title: '控制同频播放',
-    description: '向手机发送播放、暂停、上一首、下一首或跳转进度命令。',
+    description: '向手机当前选中的播放器发送播放、暂停、上一首、下一首或跳转进度命令。支持 QQ 音乐、酷狗音乐、网易云音乐的基础媒体会话控制；调用后需等待手机后台服务领取并回传执行结果。',
     inputSchema: {
       code: z.string().min(6),
       roomSecret: z.string().min(10),

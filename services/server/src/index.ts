@@ -3,7 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import { handleMcpRequest } from './mcp.js';
 import { RoomStore } from './store.js';
-import { toPublicRoom, type CommandStatus, type PlaybackCommandType, type PlaybackSnapshot } from './types.js';
+import { playerNameOf, toPublicRoom, type CommandStatus, type PlaybackCommandType, type PlaybackSnapshot } from './types.js';
 
 const port = Number(process.env.PORT ?? 3000);
 const dataFile = process.env.DATA_FILE ?? './data/rooms.json';
@@ -28,7 +28,7 @@ const text = (value: unknown, limit: number): string | undefined => {
 
 app.get('/', (_req, res) => res.redirect('/control'));
 app.get('/control', (_req, res) => res.sendFile(new URL('../public/control.html', import.meta.url).pathname));
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'tongpin-clean', version: '1.1.2' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'tongpin-clean', version: '1.2.0' }));
 
 app.post('/api/rooms', async (_req, res) => {
   const room = await store.create();
@@ -58,6 +58,7 @@ app.post('/api/rooms/:code/playback', async (req, res) => {
       positionMs: Math.max(0, Math.trunc(body.positionMs!)),
       playing: Boolean(body.playing),
       packageName: text(body.packageName, 120),
+      playerName: text(body.playerName, 80) ?? playerNameOf(text(body.packageName, 120)),
       sourceUrl: text(body.sourceUrl, 2_000),
       observedAt: Number.isFinite(body.observedAt) ? Number(body.observedAt) : Date.now(),
       publishedAt: Date.now(),

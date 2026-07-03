@@ -368,7 +368,7 @@ public final class LyricsRepository {
         connection.setConnectTimeout(1_800);
         connection.setReadTimeout(2_700);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "TongpinClean/1.1.2 (Android; synced lyrics via LRCLIB)");
+        connection.setRequestProperty("User-Agent", "TongpinClean/1.2.0 (Android; synced lyrics via LRCLIB)");
         try {
             int code = connection.getResponseCode();
             InputStream stream = code >= 200 && code <= 299

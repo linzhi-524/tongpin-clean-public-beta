@@ -31,7 +31,7 @@ public final class PlaybackSnapshot {
             boolean lyricsSynced
     ) {
         this.title = title == null ? "等待播放器" : title;
-        this.artist = artist == null ? "请先在 QQ 音乐播放一首歌" : artist;
+        this.artist = artist == null ? "请先在 QQ 音乐、酷狗音乐或网易云音乐播放一首歌" : artist;
         this.album = album == null ? "" : album;
         this.durationMs = Math.max(0L, durationMs);
         this.positionMs = Math.max(0L, positionMs);
@@ -48,7 +48,7 @@ public final class PlaybackSnapshot {
     public static PlaybackSnapshot empty() {
         return new PlaybackSnapshot(
                 "等待播放器",
-                "请先在 QQ 音乐播放一首歌",
+                "请先在 QQ 音乐、酷狗音乐或网易云音乐播放一首歌",
                 "",
                 0L,
                 0L,

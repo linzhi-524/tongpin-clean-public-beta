@@ -208,7 +208,7 @@ public final class Prefs {
         SharedPreferences p = prefs(context);
         return new PlaybackSnapshot(
                 p.getString("pb_title", "等待播放器"),
-                p.getString("pb_artist", "请先在 QQ 音乐播放一首歌"),
+                p.getString("pb_artist", "请先在 QQ 音乐、酷狗音乐或网易云音乐播放一首歌"),
                 p.getString("pb_album", ""),
                 p.getLong("pb_duration", 0L),
                 p.getLong("pb_position", 0L),

@@ -198,7 +198,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         super.onNotificationPosted(sbn);
-        if (sbn != null && "com.tencent.qqmusic".equals(sbn.getPackageName())) {
+        if (sbn != null && (PlayerCatalog.isSupported(sbn.getPackageName()) || PlayerCatalog.isMusicLike(sbn.getPackageName()))) {
             refreshActiveController();
             captureAndPublish(true);
             scheduleCaptureBurst();
@@ -208,7 +208,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
         super.onNotificationRemoved(sbn);
-        if (sbn != null && "com.tencent.qqmusic".equals(sbn.getPackageName())) {
+        if (sbn != null && (PlayerCatalog.isSupported(sbn.getPackageName()) || PlayerCatalog.isMusicLike(sbn.getPackageName()))) {
             refreshActiveController();
             captureAndPublish(true);
         }
@@ -225,23 +225,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
 
     private void refreshController(List<MediaController> controllers) {
         List<MediaController> list = controllers == null ? Collections.emptyList() : controllers;
-        MediaController next = null;
-        for (MediaController candidate : list) {
-            if ("com.tencent.qqmusic".equals(candidate.getPackageName())) {
-                next = candidate;
-                break;
-            }
-        }
-        if (next == null) {
-            for (MediaController candidate : list) {
-                String packageName = candidate.getPackageName();
-                if (packageName != null && packageName.toLowerCase().contains("music")) {
-                    next = candidate;
-                    break;
-                }
-            }
-        }
-        if (next == null && !list.isEmpty()) next = list.get(0);
+        MediaController next = chooseBestController(list);
 
         if (next != null && controller != null && next.getSessionToken().equals(controller.getSessionToken())) {
             return;
@@ -251,6 +235,34 @@ public final class TongpinNotificationListener extends NotificationListenerServi
         controller = next;
         if (controller != null) controller.registerCallback(mediaCallback, mainHandler);
         captureAndPublish(true);
+    }
+
+    private MediaController chooseBestController(List<MediaController> list) {
+        MediaController supported = null;
+        MediaController musicLike = null;
+        MediaController playingMusicLike = null;
+
+        for (MediaController candidate : list) {
+            String packageName = candidate.getPackageName();
+            if (PlayerCatalog.isSupported(packageName)) {
+                if (isPlaying(candidate)) return candidate;
+                if (supported == null) supported = candidate;
+            } else if (PlayerCatalog.isMusicLike(packageName)) {
+                if (isPlaying(candidate) && playingMusicLike == null) playingMusicLike = candidate;
+                if (musicLike == null) musicLike = candidate;
+            }
+        }
+
+        if (supported != null) return supported;
+        if (playingMusicLike != null) return playingMusicLike;
+        if (musicLike != null) return musicLike;
+        return list.isEmpty() ? null : list.get(0);
+    }
+
+    private static boolean isPlaying(MediaController candidate) {
+        if (candidate == null) return false;
+        PlaybackState state = candidate.getPlaybackState();
+        return state != null && state.getState() == PlaybackState.STATE_PLAYING;
     }
 
     private void captureAndPublish(boolean force) {
@@ -270,7 +282,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
         if (current == null) {
             return new PlaybackSnapshot(
                     "等待播放器",
-                    "请先在 QQ 音乐播放一首歌",
+                    PlayerCatalog.PLAYER_PROMPT,
                     "",
                     0L,
                     0L,
@@ -334,6 +346,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
         LyricsRepository.Snapshot libraryLyric = lyricsRepository.at(trackKey, position);
         LiveLyricsSnapshot liveLyric = Prefs.liveLyrics(this);
         boolean useLiveLyric = Prefs.qqLyricsEnabled(this)
+                && PlayerCatalog.isQqMusic(current.getPackageName())
                 && liveLyric.matches(trackKey)
                 && liveLyric.isFresh(System.currentTimeMillis(), 12_000L)
                 && liveLyric.hasText();
@@ -464,7 +477,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
             boolean retried
     ) {
         if (attempt >= VERIFY_DELAYS_MS.length) {
-            finishCommand(command, remote, false, "播放器未响应，请回到 QQ 音乐后重试");
+            finishCommand(command, remote, false, "播放器未响应，请回到当前播放器后重试");
             return;
         }
         mainHandler.postDelayed(() -> {

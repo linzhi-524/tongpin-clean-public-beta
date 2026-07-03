@@ -40,6 +40,7 @@ import com.linjian.tongpin.data.Prefs;
 import com.linjian.tongpin.data.RoomApi;
 import com.linjian.tongpin.data.RoomCredentials;
 import com.linjian.tongpin.lyrics.QQMusicLyricsAccessibilityService;
+import com.linjian.tongpin.media.PlayerCatalog;
 import com.linjian.tongpin.media.TongpinNotificationListener;
 import com.linjian.tongpin.sync.TongpinForegroundService;
 
@@ -50,7 +51,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class MainActivity extends Activity {
-    private static final String VERSION = "1.1.2";
+    private static final String VERSION = "1.2.0";
 
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private Palette palette;
@@ -234,7 +235,7 @@ public final class MainActivity extends Activity {
         info.setOrientation(LinearLayout.VERTICAL);
         songTitle = text("等待播放器", 23f, palette.text, true);
         songTitle.setMaxLines(2);
-        songArtist = text("请先在 QQ 音乐播放一首歌", 15f, palette.secondary, false);
+        songArtist = text("请先在 QQ 音乐、酷狗音乐或网易云音乐播放一首歌", 15f, palette.secondary, false);
         songArtist.setPadding(0, dp(5), 0, 0);
         songAlbum = text("", 13f, palette.secondary, false);
         songAlbum.setPadding(0, dp(3), 0, 0);
@@ -388,7 +389,7 @@ public final class MainActivity extends Activity {
         card.addView(backgroundActions, matchWrap());
 
         TextView backgroundHint = text(
-                "开启后会显示一条常驻通知；切到 QQ 音乐或锁屏后，房间仍会继续领取指令。",
+                "开启后会显示一条常驻通知；切到 QQ 音乐、酷狗音乐、网易云音乐或锁屏后，房间仍会继续领取指令。",
                 12f,
                 palette.secondary,
                 false
@@ -409,7 +410,7 @@ public final class MainActivity extends Activity {
         card.addView(lyricsActions, matchWrap());
 
         TextView lyricsHint = text(
-                "默认先匹配时间轴歌词。开启后只读取 QQ 音乐界面文字；OCR 仅在文字节点不可用时本地识别，截图不会上传或保存。",
+                "默认先匹配时间轴歌词。QQ 音乐可额外开启界面歌词读取；酷狗和网易云当前走系统媒体会话与在线歌词匹配。OCR 仅在文字节点不可用时本地识别，截图不会上传或保存。",
                 12f,
                 palette.secondary,
                 false
@@ -417,10 +418,10 @@ public final class MainActivity extends Activity {
         lyricsHint.setPadding(0, dp(6), 0, 0);
         card.addView(lyricsHint, matchWrap());
 
-        TextView sourceLabel = fieldLabel("QQ 音乐分享链接（可选）");
+        TextView sourceLabel = fieldLabel("音乐分享链接（可选）");
         sourceLabel.setPadding(0, dp(18), 0, dp(7));
         card.addView(sourceLabel);
-        sourceInput = field(Prefs.sourceUrl(this), "从 QQ 音乐分享后粘贴到这里");
+        sourceInput = field(Prefs.sourceUrl(this), "从 QQ / 酷狗 / 网易云分享后粘贴到这里");
         card.addView(sourceInput, matchWrap());
 
         LinearLayout sourceActions = new LinearLayout(this);
@@ -431,11 +432,11 @@ public final class MainActivity extends Activity {
             Prefs.bindSourceToCurrentTrack(this);
             toast("链接已绑定当前歌曲");
         }, true));
-        sourceActions.addView(actionButton("打开 QQ 音乐", () -> {
+        sourceActions.addView(actionButton("打开当前播放器", () -> {
             Prefs.saveSourceUrl(this, sourceInput.getText().toString());
             Prefs.bindSourceToCurrentTrack(this);
             String url = sourceInput.getText().toString().trim();
-            if (!url.isEmpty()) openUrl(url); else openPackage("com.tencent.qqmusic");
+            if (!url.isEmpty()) openUrl(url); else openCurrentPlayer();
         }, false));
         card.addView(sourceActions, matchWrap());
         return card;
@@ -533,7 +534,7 @@ public final class MainActivity extends Activity {
 
         roomCodeText.setText(room.code.isEmpty() ? "尚未创建房间" : room.code);
         if (room.code.isEmpty()) {
-            roomSecretText.setText("创建房间后，才能与 ChatGPT 建立专属连接。");
+            roomSecretText.setText("创建房间后，才能与 AI 客户端或网页遥控器建立专属连接。");
         } else if (secretVisible) {
             roomSecretText.setText("房间密钥  " + room.secret + "\n请只发给可信对象。");
         } else {
@@ -543,8 +544,10 @@ public final class MainActivity extends Activity {
         long position = liveDisplayPosition(playback);
         songTitle.setText(playback.title);
         songArtist.setText(playback.artist);
-        songAlbum.setText(playback.album.isEmpty() ? "" : playback.album);
-        songAlbum.setVisibility(playback.album.isEmpty() ? View.GONE : View.VISIBLE);
+        String playerName = PlayerCatalog.displayName(playback.packageName);
+        String albumLine = playback.album.isEmpty() ? playerName : playback.album + " · " + playerName;
+        songAlbum.setText(albumLine);
+        songAlbum.setVisibility(albumLine.isEmpty() ? View.GONE : View.VISIBLE);
         timeText.setText(formatTime(position) + " / " + formatTime(playback.durationMs));
         int progress = playback.durationMs > 0L
                 ? (int) Math.min(1000L, Math.round(position * 1000.0 / playback.durationMs))
@@ -584,7 +587,8 @@ public final class MainActivity extends Activity {
                                 ? isLyricsAccessibilityEnabled() ? "已授权" : "待系统授权"
                                 : "已关闭")
                         + "\nOCR 兜底  " + (Prefs.ocrLyricsEnabled(this) ? "已开启" : "已关闭")
-                        + "\n媒体来源  " + (playback.packageName.isEmpty() ? "尚未识别" : playback.packageName)
+                        + "\n当前播放器  " + PlayerCatalog.displayName(playback.packageName)
+                        + "\n媒体包名  " + (playback.packageName.isEmpty() ? "尚未识别" : playback.packageName)
                         + "\n歌词来源  " + (playback.lyricsSource.isEmpty() ? "尚无" : playback.lyricsSource)
         );
     }
@@ -807,9 +811,21 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void openCurrentPlayer() {
+        PlaybackSnapshot playback = Prefs.playback(this);
+        String packageName = PlayerCatalog.isSupported(playback.packageName)
+                ? playback.packageName
+                : PlayerCatalog.firstInstalledPackage(this);
+        openPackage(packageName);
+    }
+
     private void openPackage(String name) {
         Intent launch = getPackageManager().getLaunchIntentForPackage(name);
-        if (launch != null) startActivity(launch); else toast("没有找到 QQ 音乐");
+        if (launch != null) {
+            startActivity(launch);
+        } else {
+            toast("没有找到" + PlayerCatalog.displayName(name));
+        }
     }
 
     private LinearLayout card() {

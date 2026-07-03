@@ -11,7 +11,10 @@
 </head>
 <body>
   <div class="wrap">
-    <section class="hero"><h1>同频</h1><div>不用 ChatGPT 也能先测试手机控制链路。</div></section>
+    <section class="hero"><h1>同频</h1><div>不用接入任何 AI，也能先测试手机控制链路。</div></section>
+    <section class="card small">
+      这里是网页遥控器：适合先验证手机、服务器和播放器控制是否正常。AI 客户端、MCP 或 REST API 出问题时，也可以先用这一页排查。
+    </section>
     <section class="card">
       <div class="grid">
         <input id="code" placeholder="房间码" maxlength="6" />
@@ -23,6 +26,7 @@
     <section class="card">
       <div id="title" class="song">等待歌曲</div>
       <div id="artist" class="muted">—</div>
+      <div id="player" class="small muted">当前播放器：尚未识别</div>
       <div id="lyric" class="lyric">歌词等待同步</div>
       <div id="nextLyric" class="next-lyric"></div>
       <div class="progress"><div id="bar" class="bar"></div></div>
@@ -48,9 +52,10 @@
 const $=id=>document.getElementById(id);let timer=null;
 const auth=()=>({"Authorization":"Bearer "+$('secret').value.trim(),"Content-Type":"application/json"});
 const fmt=ms=>{const s=Math.max(0,Math.floor((ms||0)/1000));return Math.floor(s/60)+":"+String(s%60).padStart(2,'0')};
+const playerName=pkg=>({"com.tencent.qqmusic":"QQ 音乐","com.kugou.android":"酷狗音乐","com.netease.cloudmusic":"网易云音乐"}[pkg]||pkg||"尚未识别");
 function save(){localStorage.setItem('tongpin_code',$('code').value.trim().toUpperCase());localStorage.setItem('tongpin_secret',$('secret').value.trim())}
 async function request(path,opt={}){const r=await fetch(path,{...opt,headers:{...auth(),...(opt.headers||{})}});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
-async function refresh(){const code=$('code').value.trim().toUpperCase();if(!code)return;try{const room=await request('/api/rooms/'+code);$('connection').textContent='已连接 · 最近更新 '+new Date(room.updatedAt).toLocaleTimeString();$('connection').className='status ok';const p=room.playback||{};$('title').textContent=p.title||'等待歌曲';$('artist').textContent=(p.artist||'—')+(p.playing?' · 播放中':' · 已暂停');$('lyric').textContent=p.lyric||(p.lyricsSource||'歌词等待同步');$('nextLyric').textContent=p.nextLyric?('下一句：'+p.nextLyric):'';$('time').textContent=fmt(p.positionMs)+' / '+fmt(p.durationMs);$('bar').style.width=(p.durationMs?Math.min(100,p.positionMs/p.durationMs*100):0)+'%';const result=room.lastCommandResult;$('commandResult').textContent=result?`${result.status} · ${result.message}`:'尚无命令';}catch(e){$('connection').textContent='连接失败：'+e.message;$('connection').className='status bad'}}
+async function refresh(){const code=$('code').value.trim().toUpperCase();if(!code)return;try{const room=await request('/api/rooms/'+code);$('connection').textContent='已连接 · 最近更新 '+new Date(room.updatedAt).toLocaleTimeString();$('connection').className='status ok';const p=room.playback||{};$('title').textContent=p.title||'等待歌曲';$('artist').textContent=(p.artist||'—')+(p.playing?' · 播放中':' · 已暂停');$('player').textContent='当前播放器：'+(p.playerName||playerName(p.packageName));$('lyric').textContent=p.lyric||(p.lyricsSource||'歌词等待同步');$('nextLyric').textContent=p.nextLyric?('下一句：'+p.nextLyric):'';$('time').textContent=fmt(p.positionMs)+' / '+fmt(p.durationMs);$('bar').style.width=(p.durationMs?Math.min(100,p.positionMs/p.durationMs*100):0)+'%';const result=room.lastCommandResult;$('commandResult').textContent=result?`${result.status} · ${result.message}`:'尚无命令';}catch(e){$('connection').textContent='连接失败：'+e.message;$('connection').className='status bad'}}
 async function command(type,positionMs){const code=$('code').value.trim().toUpperCase();try{await request('/api/rooms/'+code+'/commands',{method:'POST',body:JSON.stringify({type,positionMs})});$('commandResult').textContent='命令已发送，等待手机领取';setTimeout(refresh,400)}catch(e){$('commandResult').textContent='发送失败：'+e.message}}
 $('connect').onclick=()=>{save();refresh();clearInterval(timer);timer=setInterval(refresh,1000)};
 document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>command(b.dataset.command));

@@ -78,3 +78,20 @@ test('public room projects a recent playing position without mutating stored dat
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('public room exposes playerName derived from packageName', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tongpin-clean-'));
+  try {
+    const store = new RoomStore(join(dir, 'rooms.json'));
+    const room = await store.create();
+    await store.publishPlayback(room.code, room.secret, {
+      title: 'Song', artist: 'Artist', durationMs: 1000, positionMs: 10,
+      playing: false, observedAt: Date.now(), publishedAt: Date.now(),
+      packageName: 'com.netease.cloudmusic'
+    });
+    const publicRoom = toPublicRoom(store.authenticate(room.code, room.secret));
+    assert.equal(publicRoom.playback?.playerName, '网易云音乐');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

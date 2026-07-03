@@ -23,6 +23,7 @@ export interface PlaybackSnapshot {
   positionMs: number;
   playing: boolean;
   packageName?: string;
+  playerName?: string;
   sourceUrl?: string;
   observedAt: number;
   publishedAt?: number;
@@ -54,13 +55,34 @@ export interface Room {
 
 export type PublicRoom = Omit<Room, 'secret'>;
 
+export const playerNameOf = (packageName?: string): string => {
+  switch (packageName) {
+    case 'com.tencent.qqmusic':
+      return 'QQ 音乐';
+    case 'com.kugou.android':
+      return '酷狗音乐';
+    case 'com.netease.cloudmusic':
+      return '网易云音乐';
+    case undefined:
+    case '':
+      return '尚未识别';
+    default:
+      return packageName;
+  }
+};
+
+const withPlayerName = (playback: PlaybackSnapshot): PlaybackSnapshot => ({
+  ...playback,
+  playerName: playback.playerName || playerNameOf(playback.packageName)
+});
+
 const projectPlaybackPosition = (playback: PlaybackSnapshot): PlaybackSnapshot => {
-  if (!playback.playing || !playback.publishedAt) return { ...playback };
+  if (!playback.playing || !playback.publishedAt) return withPlayerName(playback);
   const elapsed = Math.max(0, Math.min(5_000, Date.now() - playback.publishedAt));
   const positionMs = playback.durationMs > 0
     ? Math.min(playback.durationMs, playback.positionMs + elapsed)
     : playback.positionMs + elapsed;
-  return { ...playback, positionMs };
+  return withPlayerName({ ...playback, positionMs });
 };
 
 export const toPublicRoom = (room: Room): PublicRoom => ({
