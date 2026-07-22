@@ -1,10 +1,13 @@
-export type PlaybackCommandType = 'play' | 'pause' | 'seek' | 'next' | 'previous';
+export type PlaybackCommandType = 'play' | 'pause' | 'seek' | 'next' | 'previous' | 'search_play';
 export type CommandStatus = 'queued' | 'received' | 'executed' | 'failed';
 
 export interface PlaybackCommand {
   id: string;
   type: PlaybackCommandType;
   positionMs?: number;
+  query?: string;
+  title?: string;
+  artist?: string;
   createdAt: number;
 }
 

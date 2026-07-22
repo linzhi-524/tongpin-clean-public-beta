@@ -27,8 +27,16 @@ const text = (value: unknown, limit: number): string | undefined => {
 };
 
 app.get('/', (_req, res) => res.redirect('/control'));
+app.get('/lan', (_req, res) => res.json({
+  ok: true,
+  mode: 'lan',
+  message: 'Use http://YOUR_COMPUTER_LAN_IP:' + port + ' as the Android server address when phone and computer are on the same Wi-Fi.',
+  health: '/health',
+  control: '/control',
+  mcp: '/mcp'
+}));
 app.get('/control', (_req, res) => res.sendFile(new URL('../public/control.html', import.meta.url).pathname));
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'tongpin-clean', version: '1.2.0' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'tongpin-clean', version: '1.3.1', lan: true }));
 
 app.post('/api/rooms', async (_req, res) => {
   const room = await store.create();
@@ -76,7 +84,7 @@ app.post('/api/rooms/:code/playback', async (req, res) => {
 app.post('/api/rooms/:code/commands', async (req, res) => {
   try {
     const type = req.body?.type as PlaybackCommandType;
-    if (!['play', 'pause', 'seek', 'next', 'previous'].includes(type)) {
+    if (!['play', 'pause', 'seek', 'next', 'previous', 'search_play'].includes(type)) {
       res.status(400).json({ error: 'INVALID_COMMAND' });
       return;
     }
@@ -85,7 +93,22 @@ app.post('/api/rooms/:code/commands', async (req, res) => {
       res.status(400).json({ error: 'INVALID_POSITION' });
       return;
     }
-    const room = await store.setCommand(req.params.code, secretOf(req), { type, positionMs });
+    const title = type === 'search_play' ? String(req.body?.title ?? '').trim().slice(0, 160) : undefined;
+    const artist = type === 'search_play' ? String(req.body?.artist ?? '').trim().slice(0, 160) : undefined;
+    const query = type === 'search_play'
+      ? String(req.body?.query ?? [title, artist].filter(Boolean).join(' ')).trim().slice(0, 320)
+      : undefined;
+    if (type === 'search_play' && (!title || !query)) {
+      res.status(400).json({ error: 'INVALID_SEARCH_QUERY' });
+      return;
+    }
+    const room = await store.setCommand(req.params.code, secretOf(req), {
+      type,
+      positionMs,
+      query,
+      title,
+      artist: artist || undefined
+    });
     res.json(toPublicRoom(room));
   } catch {
     res.status(404).json({ error: 'ROOM_NOT_FOUND_OR_SECRET_INVALID' });

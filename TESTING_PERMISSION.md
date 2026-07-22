@@ -1,6 +1,6 @@
 # 公开测试许可
 
-Copyright (c) 2026 飞鸢、林澈
+Copyright (c) 2026 Tongpin Clean contributors
 
 允许个人用户为非商业测试目的查看、Fork、部署和修改本仓库代码，并向原仓库提交问题或改进建议。
 

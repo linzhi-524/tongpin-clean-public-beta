@@ -10,7 +10,7 @@ const textResult = (value: unknown) => ({
 });
 
 export function createMcpServer(store: RoomStore): McpServer {
-  const server = new McpServer({ name: 'tongpin-clean', version: '1.2.0' });
+  const server = new McpServer({ name: 'tongpin-clean', version: '1.3.1' });
 
   server.registerTool('create_room', {
     title: '创建同频房间',
@@ -51,6 +51,33 @@ export function createMcpServer(store: RoomStore): McpServer {
     }
     try {
       const room = await store.setCommand(code, roomSecret, { type: command, positionMs });
+      return textResult({ ok: true, command: room.pendingCommand, result: room.lastCommandResult });
+    } catch {
+      return textResult({ ok: false, error: '房间不存在或密钥错误' });
+    }
+  });
+
+
+  server.registerTool('search_and_play', {
+    title: '搜索并播放歌曲',
+    description: '让手机自动搜索指定歌曲并开始播放。优先使用系统媒体搜索；QQ 音乐不响应时，可由已授权的无障碍服务自动打开 QQ 音乐、输入关键词并点击最匹配结果。',
+    inputSchema: {
+      code: z.string().min(6),
+      roomSecret: z.string().min(10),
+      title: z.string().min(1).max(160),
+      artist: z.string().max(160).optional()
+    }
+  }, async ({ code, roomSecret, title, artist }) => {
+    try {
+      const cleanTitle = title.trim();
+      const cleanArtist = artist?.trim() ?? '';
+      const query = [cleanTitle, cleanArtist].filter(Boolean).join(' ');
+      const room = await store.setCommand(code, roomSecret, {
+        type: 'search_play',
+        query,
+        title: cleanTitle,
+        artist: cleanArtist || undefined
+      });
       return textResult({ ok: true, command: room.pendingCommand, result: room.lastCommandResult });
     } catch {
       return textResult({ ok: false, error: '房间不存在或密钥错误' });

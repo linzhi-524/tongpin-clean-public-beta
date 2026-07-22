@@ -176,7 +176,7 @@ public final class LyricsRepository {
                 } catch (Throwable ignored) {
                 }
                 JSONObject bestSoFar = chooseBest(records, query, durationMs);
-                if (hasSyncedLyrics(bestSoFar) && confidence(bestSoFar, query, durationMs) >= 175) {
+                if (hasSyncedLyrics(bestSoFar) && confidence(bestSoFar, query, durationMs) >= 190) {
                     break;
                 }
             }
@@ -266,7 +266,7 @@ public final class LyricsRepository {
                 best = item;
             }
         }
-        return bestScore >= 60 ? best : null;
+        return bestScore >= 125 ? best : null;
     }
 
     private static int confidence(JSONObject item, TrackQuery query, long durationMs) {
@@ -284,18 +284,68 @@ public final class LyricsRepository {
         else if (!expectedTitle.isEmpty() && (itemTitle.contains(expectedTitle) || expectedTitle.contains(itemTitle))) score += 45;
         else score -= 60;
 
-        if (!alternateArtist.isEmpty() && itemArtist.equals(alternateArtist)) score += 75;
-        else if (itemArtist.equals(expectedArtist)) score += 65;
-        else if (!expectedArtist.isEmpty() && (itemArtist.contains(expectedArtist) || expectedArtist.contains(itemArtist))) score += 28;
-        else if (!alternateArtist.isEmpty() && (itemArtist.contains(alternateArtist) || alternateArtist.contains(itemArtist))) score += 34;
+        boolean artistMatched = false;
+        if (!alternateArtist.isEmpty() && itemArtist.equals(alternateArtist)) {
+            score += 75;
+            artistMatched = true;
+        } else if (!expectedArtist.isEmpty() && itemArtist.equals(expectedArtist)) {
+            score += 70;
+            artistMatched = true;
+        } else if (!expectedArtist.isEmpty() && (itemArtist.contains(expectedArtist) || expectedArtist.contains(itemArtist))) {
+            score += 34;
+            artistMatched = true;
+        } else if (!alternateArtist.isEmpty() && (itemArtist.contains(alternateArtist) || alternateArtist.contains(itemArtist))) {
+            score += 38;
+            artistMatched = true;
+        } else if (!expectedArtist.isEmpty() && !itemArtist.isEmpty()) {
+            score -= 80;
+        }
 
         if (expectedSeconds > 0L && itemDuration > 0L) {
             long diff = Math.abs(itemDuration - expectedSeconds);
-            score += diff <= 2 ? 50 : diff <= 6 ? 28 : diff <= 12 ? 10 : diff <= 25 ? -5 : -38;
+            score += diff <= 2 ? 50 : diff <= 6 ? 28 : diff <= 12 ? 10 : diff <= 25 ? -8 : -45;
         }
-        if (hasSyncedLyrics(item)) score += 65;
+        if (hasSyncedLyrics(item)) score += 60;
+        if (looksLikeLanguageMismatch(item.optString("syncedLyrics", ""), query)) score -= artistMatched ? 20 : 55;
         if (item.optBoolean("instrumental", false)) score += 10;
         return score;
+    }
+
+    private static boolean looksLikeLanguageMismatch(String lyrics, TrackQuery query) {
+        if (lyrics == null || lyrics.trim().isEmpty()) return false;
+        boolean expectedCjk = containsCjk(query.title) || containsCjk(query.artist) || containsCjk(query.alternateArtist);
+        if (!expectedCjk) return false;
+        int latin = 0;
+        int cjk = 0;
+        int letters = 0;
+        for (int i = 0; i < lyrics.length(); i++) {
+            char c = lyrics.charAt(i);
+            if (isCjk(c)) {
+                cjk += 1;
+                letters += 1;
+            } else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+                latin += 1;
+                letters += 1;
+            }
+        }
+        return letters >= 24 && cjk == 0 && latin >= 18;
+    }
+
+    private static boolean containsCjk(String value) {
+        if (value == null) return false;
+        for (int i = 0; i < value.length(); i++) {
+            if (isCjk(value.charAt(i))) return true;
+        }
+        return false;
+    }
+
+    private static boolean isCjk(char c) {
+        Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
+        return block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A
+                || block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
+                || block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION
+                || block == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS;
     }
 
     private static boolean hasSyncedLyrics(JSONObject value) {
@@ -368,7 +418,7 @@ public final class LyricsRepository {
         connection.setConnectTimeout(1_800);
         connection.setReadTimeout(2_700);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "TongpinClean/1.2.0 (Android; synced lyrics via LRCLIB)");
+        connection.setRequestProperty("User-Agent", "TongpinClean/1.3.1-public (Android; synced lyrics via LRCLIB)");
         try {
             int code = connection.getResponseCode();
             InputStream stream = code >= 200 && code <= 299

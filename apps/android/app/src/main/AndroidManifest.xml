@@ -22,7 +22,7 @@
         android:icon="@drawable/ic_tongpin"
         android:roundIcon="@drawable/ic_tongpin"
         android:theme="@style/Theme.Tongpin"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"
@@ -45,7 +45,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Keeps a user-enabled private music room synchronized and receives remote playback commands while the app is in the background." />
+                android:value="Keeps a user-enabled music room synchronized and receives remote playback commands while the app is in the background." />
         </service>
 
         <service

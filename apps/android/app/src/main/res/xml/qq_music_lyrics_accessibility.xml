@@ -7,4 +7,4 @@
     android:canTakeScreenshot="true"
     android:description="@string/qq_music_lyrics_accessibility_description"
     android:notificationTimeout="100"
-    android:packageNames="com.tencent.qqmusic" />
+    android:packageNames="com.tencent.qqmusic,com.kugou.android,com.netease.cloudmusic" />

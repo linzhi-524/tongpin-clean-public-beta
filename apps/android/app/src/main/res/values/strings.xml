@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">同频 Clean</string>
-    <string name="qq_music_lyrics_accessibility_label">同频歌词读取</string>
-    <string name="qq_music_lyrics_accessibility_description">仅在用户主动开启时读取 QQ 音乐界面中的歌词文字；可选使用本地 OCR，截图不会上传或保存。</string>
+    <string name="qq_music_lyrics_accessibility_label">同频歌词与自动点歌</string>
+    <string name="qq_music_lyrics_accessibility_description">仅在用户主动授权后读取 QQ 音乐、酷狗音乐、网易云音乐界面歌词；可选使用本地 OCR，截图不会上传或保存。收到自动点歌指令时，可在 QQ 音乐中打开搜索、输入歌名并点击匹配结果。</string>
 </resources>

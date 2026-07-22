@@ -8,6 +8,7 @@ import android.media.MediaMetadata;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
 import android.media.session.PlaybackState;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -22,6 +23,8 @@ import com.linjian.tongpin.data.RemoteCommand;
 import com.linjian.tongpin.data.RoomApi;
 import com.linjian.tongpin.data.RoomCredentials;
 import com.linjian.tongpin.lyrics.LyricsRepository;
+import com.linjian.tongpin.lyrics.ManualLyricsStore;
+import com.linjian.tongpin.lyrics.QQMusicLyricsAccessibilityService;
 
 import org.json.JSONObject;
 
@@ -38,6 +41,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
     private static final long POSITION_PUBLISH_STEP_MS = 1_200L;
     private static final long HEARTBEAT_PUBLISH_MS = 4_000L;
     private static final long[] VERIFY_DELAYS_MS = {320L, 520L, 780L, 1_150L, 1_700L, 2_400L, 3_200L};
+    private static final long[] SEARCH_VERIFY_DELAYS_MS = {500L, 780L, 1_100L, 1_500L, 2_100L, 2_900L, 3_900L, 5_200L};
     private static volatile TongpinNotificationListener instance;
 
     private MediaSessionManager sessionManager;
@@ -85,6 +89,9 @@ public final class TongpinNotificationListener extends NotificationListenerServi
                     } else {
                         JSONObject json = RoomApi.getRoomSync(TongpinNotificationListener.this);
                         Prefs.saveLastSync(TongpinNotificationListener.this, System.currentTimeMillis());
+                        if (json.optJSONArray("notes") != null) {
+                            Prefs.saveRoomNotes(TongpinNotificationListener.this, json.optJSONArray("notes").toString());
+                        }
                         if (commandInFlight.get().isEmpty() && !localCommandInFlight.get()) {
                             Prefs.saveStatus(TongpinNotificationListener.this, "服务器已连接 · 实时同步中");
                         }
@@ -237,6 +244,7 @@ public final class TongpinNotificationListener extends NotificationListenerServi
         captureAndPublish(true);
     }
 
+
     private MediaController chooseBestController(List<MediaController> list) {
         MediaController supported = null;
         MediaController musicLike = null;
@@ -343,18 +351,39 @@ public final class TongpinNotificationListener extends NotificationListenerServi
                 duration,
                 () -> mainHandler.post(() -> captureAndPublish(true))
         );
+        ManualLyricsStore.Snapshot manualLyric = ManualLyricsStore.at(this, trackKey, position);
         LyricsRepository.Snapshot libraryLyric = lyricsRepository.at(trackKey, position);
         LiveLyricsSnapshot liveLyric = Prefs.liveLyrics(this);
         boolean useLiveLyric = Prefs.qqLyricsEnabled(this)
-                && PlayerCatalog.isQqMusic(current.getPackageName())
                 && liveLyric.matches(trackKey)
                 && liveLyric.isFresh(System.currentTimeMillis(), 12_000L)
                 && liveLyric.hasText();
 
-        String lyricCurrent = useLiveLyric ? liveLyric.current : libraryLyric.current;
-        String lyricNext = useLiveLyric ? liveLyric.next : libraryLyric.next;
-        String lyricSource = useLiveLyric ? liveLyric.source : libraryLyric.source;
-        boolean lyricSynced = useLiveLyric || libraryLyric.synced;
+        String lyricCurrent;
+        String lyricNext;
+        String lyricSource;
+        boolean lyricSynced;
+        if (manualLyric.hasText()) {
+            lyricCurrent = manualLyric.current;
+            lyricNext = manualLyric.next;
+            lyricSource = manualLyric.source;
+            lyricSynced = true;
+        } else if (libraryLyric.synced) {
+            lyricCurrent = libraryLyric.current;
+            lyricNext = libraryLyric.next;
+            lyricSource = libraryLyric.source;
+            lyricSynced = true;
+        } else if (useLiveLyric) {
+            lyricCurrent = liveLyric.current;
+            lyricNext = liveLyric.next;
+            lyricSource = liveLyric.source;
+            lyricSynced = true;
+        } else {
+            lyricCurrent = libraryLyric.current;
+            lyricNext = libraryLyric.next;
+            lyricSource = libraryLyric.source;
+            lyricSynced = libraryLyric.synced;
+        }
 
         return new PlaybackSnapshot(
                 safeTitle,
@@ -435,7 +464,14 @@ public final class TongpinNotificationListener extends NotificationListenerServi
         Long positionMs = json.has("positionMs") && !json.isNull("positionMs")
                 ? json.optLong("positionMs")
                 : null;
-        RemoteCommand command = new RemoteCommand(id, json.optString("type", ""), positionMs);
+        RemoteCommand command = new RemoteCommand(
+                id,
+                json.optString("type", ""),
+                positionMs,
+                json.optString("query", ""),
+                json.optString("title", ""),
+                json.optString("artist", "")
+        );
 
         commandNetwork.execute(() -> {
             try {
@@ -461,7 +497,10 @@ public final class TongpinNotificationListener extends NotificationListenerServi
 
         boolean sent = dispatchCommand(command, false);
         if (!sent) {
-            finishCommand(command, remote, false, "未找到可控制的媒体会话");
+            String message = "search_play".equals(command.type)
+                    ? "自动点歌服务未连接，请在系统无障碍设置中开启“同频歌词与自动点歌”"
+                    : "未找到可控制的媒体会话";
+            finishCommand(command, remote, false, message);
             return;
         }
         Prefs.saveStatus(this, "播放器处理中 · " + commandLabel(command.type));
@@ -476,8 +515,12 @@ public final class TongpinNotificationListener extends NotificationListenerServi
             int attempt,
             boolean retried
     ) {
-        if (attempt >= VERIFY_DELAYS_MS.length) {
-            finishCommand(command, remote, false, "播放器未响应，请回到当前播放器后重试");
+        long[] delays = "search_play".equals(command.type) ? SEARCH_VERIFY_DELAYS_MS : VERIFY_DELAYS_MS;
+        if (attempt >= delays.length) {
+            String message = "search_play".equals(command.type)
+                    ? "自动点歌未成功，请确认已开启“同频歌词与自动点歌”无障碍服务"
+                    : "播放器未响应，请回到当前播放器后重试";
+            finishCommand(command, remote, false, message);
             return;
         }
         mainHandler.postDelayed(() -> {
@@ -497,11 +540,24 @@ public final class TongpinNotificationListener extends NotificationListenerServi
                 if (didRetry) Prefs.saveStatus(this, "播放器响应较慢 · 已自动重试");
             }
             verifyCommand(command, before, remote, attempt + 1, didRetry || retried);
-        }, VERIFY_DELAYS_MS[attempt]);
+        }, delays[attempt]);
     }
 
     private boolean dispatchCommand(RemoteCommand command, boolean fallbackOnly) {
         try {
+            if ("search_play".equals(command.type)) {
+                if (!fallbackOnly && controller != null && !command.query.isEmpty()) {
+                    controller.getTransportControls().playFromSearch(command.query, Bundle.EMPTY);
+                    return true;
+                }
+                return QQMusicLyricsAccessibilityService.requestSearchAndPlay(
+                        command.id,
+                        command.query,
+                        command.title,
+                        command.artist
+                );
+            }
+
             if ("seek".equals(command.type)) {
                 if (command.positionMs == null || controller == null) return false;
                 controller.getTransportControls().seekTo(command.positionMs);
@@ -568,6 +624,10 @@ public final class TongpinNotificationListener extends NotificationListenerServi
             case "seek":
                 if (command.positionMs == null) return false;
                 return Math.abs(current.positionMs - command.positionMs) <= 3_000L;
+            case "search_play":
+                if (!current.playing || current.title.isEmpty()) return false;
+                String expected = command.title.isEmpty() ? command.query : command.title;
+                return fuzzyContains(current.title, expected);
             default:
                 return false;
         }
@@ -579,6 +639,9 @@ public final class TongpinNotificationListener extends NotificationListenerServi
         Prefs.saveLastCommandStatus(this, status);
         Prefs.saveLastCommandResult(this, message);
         Prefs.saveStatus(this, success ? message : "控制失败 · " + message);
+        if ("search_play".equals(command.type)) {
+            QQMusicLyricsAccessibilityService.finishSearchAndPlay(command.id, success);
+        }
 
         if (remote) {
             commandNetwork.execute(() -> {
@@ -662,6 +725,9 @@ public final class TongpinNotificationListener extends NotificationListenerServi
             case "next": return "已切换到下一首";
             case "previous": return "已切换到上一首";
             case "seek": return "播放进度已跳转";
+            case "search_play": return command.title.isEmpty()
+                    ? "已自动搜索并开始播放"
+                    : "已自动播放《" + command.title + "》";
             default: return "命令已执行";
         }
     }
@@ -673,8 +739,24 @@ public final class TongpinNotificationListener extends NotificationListenerServi
             case "next": return "下一首";
             case "previous": return "上一首";
             case "seek": return "跳转进度";
+            case "search_play": return "自动点歌";
             default: return "未知控制";
         }
+    }
+
+    private static boolean fuzzyContains(String actual, String expected) {
+        String left = normalizeForMatch(actual);
+        String right = normalizeForMatch(expected);
+        if (left.isEmpty() || right.isEmpty()) return false;
+        return left.equals(right) || left.contains(right) || right.contains(left);
+    }
+
+    private static String normalizeForMatch(String value) {
+        if (value == null) return "";
+        return value.toLowerCase(java.util.Locale.ROOT)
+                .replaceAll("(?i)\\s*(?:-|–|—)\\s*.*$", "")
+                .replaceAll("[\\p{Punct}\\s]+", "")
+                .trim();
     }
 
     private static String safeMessage(Throwable error) {

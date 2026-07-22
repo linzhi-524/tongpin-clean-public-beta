@@ -5,6 +5,8 @@ import android.content.SharedPreferences;
 
 import java.util.Locale;
 
+import org.json.JSONArray;
+
 public final class Prefs {
     private static final String NAME = "tongpin_clean";
     private static final String DEFAULT_SERVER = "https://your-service.onrender.com";
@@ -62,7 +64,23 @@ public final class Prefs {
                 .remove("room_secret")
                 .remove("last_command_id")
                 .remove("last_command_status")
+                .remove("room_notes")
                 .apply();
+    }
+
+
+    public static JSONArray roomNotes(Context context) {
+        String raw = prefs(context).getString("room_notes", "[]");
+        try {
+            return new JSONArray(raw == null || raw.isEmpty() ? "[]" : raw);
+        } catch (Throwable ignored) {
+            return new JSONArray();
+        }
+    }
+
+    public static void saveRoomNotes(Context context, String rawJsonArray) {
+        String value = rawJsonArray == null || rawJsonArray.trim().isEmpty() ? "[]" : rawJsonArray.trim();
+        prefs(context).edit().putString("room_notes", value).apply();
     }
 
 
@@ -127,6 +145,36 @@ public final class Prefs {
                 .remove("live_lyrics_source")
                 .remove("live_lyrics_observed")
                 .apply();
+    }
+
+
+    private static String manualLyricsStorageKey(String trackKey) {
+        String value = trackKey == null ? "" : trackKey;
+        return "manual_lyrics_" + Integer.toHexString(value.hashCode());
+    }
+
+    public static boolean hasManualLyrics(Context context, String trackKey) {
+        return !manualLyrics(context, trackKey).trim().isEmpty();
+    }
+
+    public static String manualLyrics(Context context, String trackKey) {
+        if (trackKey == null || trackKey.isEmpty()) return "";
+        return prefs(context).getString(manualLyricsStorageKey(trackKey), "");
+    }
+
+    public static void saveManualLyrics(Context context, String trackKey, String value) {
+        if (trackKey == null || trackKey.isEmpty()) return;
+        String clean = value == null ? "" : value.trim();
+        if (clean.isEmpty()) {
+            clearManualLyrics(context, trackKey);
+            return;
+        }
+        prefs(context).edit().putString(manualLyricsStorageKey(trackKey), clean).apply();
+    }
+
+    public static void clearManualLyrics(Context context, String trackKey) {
+        if (trackKey == null || trackKey.isEmpty()) return;
+        prefs(context).edit().remove(manualLyricsStorageKey(trackKey)).apply();
     }
 
     public static String sourceUrl(Context context) {
